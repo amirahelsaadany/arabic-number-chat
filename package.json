@@ -1,0 +1,14 @@
+{
+  "name": "arabic-number-chat",
+  "version": "1.0.0",
+  "description": "صفحة شات عربية (RTL) تحوّل أي أرقام في الرسالة إلى كلمات عربية منطوقة، بما في ذلك الأوقات والكسور والأرقام الكبيرة.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test-manual.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
