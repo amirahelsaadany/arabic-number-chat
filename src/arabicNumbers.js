@@ -176,7 +176,10 @@ function decimalToWords(intPart, fracPart) {
   if (fracPart === '75') return `${intWords} وثلاثة أرباع`;
   if (fracPart === '50') return `${intWords} ونصف`;
 
-  const fracWords = fracPart.split('').map(digitToWord).join(' ');
+  // Read the fractional part as a whole number (e.g. ".99" -> "تسعة وتسعون",
+  // ".998" -> "تسعمئة وثمانية وتسعون"), which is how people naturally read
+  // prices and measurements out loud.
+  const fracWords = integerToWords(fracPart);
   return `${intWords} فاصلة ${fracWords}`;
 }
 
