@@ -25,12 +25,17 @@ const TENS = ['', '', 'عشرون', 'ثلاثون', 'أربعون', 'خمسون'
 const HUNDREDS = ['', 'مئة', 'مئتان', 'ثلاثمئة', 'أربعمئة', 'خمسمئة', 'ستمئة', 'سبعمئة', 'ثمانمئة', 'تسعمئة'];
 
 // Group names: [singular, dual, plural(3-10), singular-used-for-11+]
+// Extended far enough to cover any number a person would realistically type
+// (up to 10^21 - a sextillion). Beyond that we fall back gracefully.
 const GROUPS = [
   null, // ones group has no name
   { singular: 'ألف', dual: 'ألفان', plural: 'آلاف', many: 'ألف' },
   { singular: 'مليون', dual: 'مليونان', plural: 'ملايين', many: 'مليون' },
-  { singular: 'مليار', dual: 'مليار', plural: 'مليارات', many: 'مليار' },
+  { singular: 'مليار', dual: 'ملياران', plural: 'مليارات', many: 'مليار' },
   { singular: 'تريليون', dual: 'تريليونان', plural: 'تريليونات', many: 'تريليون' },
+  { singular: 'كوادريليون', dual: 'كوادريليونان', plural: 'كوادريليونات', many: 'كوادريليون' },
+  { singular: 'كوينتليون', dual: 'كوينتليونان', plural: 'كوينتليونات', many: 'كوينتليون' },
+  { singular: 'سكستيليون', dual: 'سكستيليونان', plural: 'سكستيليونات', many: 'سكستيليون' },
 ];
 
 // Feminine cardinal forms used for clock hours ("الساعة تسع ونص")
@@ -168,6 +173,62 @@ function digitToWord(d) {
   return d === '0' ? 'صفر' : ONES[parseInt(d, 10)];
 }
 
+// ---------------------------------------------------------------------
+// Slash fractions: "1/2", "3/4", "4/3" ...
+// ---------------------------------------------------------------------
+const FRACTION_WORDS = {
+  2: { unit: 'نصف', dual: 'نصفان', plural: 'أنصاف' },
+  3: { unit: 'ثلث', dual: 'ثلثان', plural: 'أثلاث' },
+  4: { unit: 'ربع', dual: 'ربعان', plural: 'أرباع' },
+  5: { unit: 'خمس', dual: 'خمسان', plural: 'أخماس' },
+  6: { unit: 'سدس', dual: 'سدسان', plural: 'أسداس' },
+  7: { unit: 'سبع', dual: 'سبعان', plural: 'أسباع' },
+  8: { unit: 'ثمن', dual: 'ثمنان', plural: 'أثمان' },
+  9: { unit: 'تسع', dual: 'تسعان', plural: 'أتساع' },
+  10: { unit: 'عشر', dual: 'عشران', plural: 'أعشار' },
+};
+
+/** Spells a proper fraction (numerator < denominator) using natural Arabic fraction words. */
+function properFractionToWords(numerator, denominator) {
+  const table = FRACTION_WORDS[denominator];
+
+  if (!table) {
+    // No natural word for this denominator (e.g. 5/13) -> read as "X على Y".
+    return `${integerToWords(numerator)} على ${integerToWords(denominator)}`;
+  }
+
+  if (numerator === 1) return table.unit;
+  if (numerator === 2) return table.dual;
+  return `${integerToWords(numerator)} ${table.plural}`;
+}
+
+/** Spells any "numerator/denominator" fraction, including improper ones like 4/3. */
+function fractionToWords(numeratorStr, denominatorStr) {
+  const numerator = parseInt(numeratorStr, 10);
+  const denominator = parseInt(denominatorStr, 10);
+
+  if (denominator === 0) {
+    // Not a real fraction (division by zero) — just read both numbers plainly.
+    return `${integerToWords(numerator)} على صفر`;
+  }
+
+  if (numerator === denominator) {
+    return integerToWords(1); // e.g. 3/3 = "واحد"
+  }
+
+  if (numerator < denominator) {
+    return properFractionToWords(numerator, denominator);
+  }
+
+  // Improper fraction: split into a whole part + a proper-fraction remainder.
+  const whole = Math.floor(numerator / denominator);
+  const remainder = numerator % denominator;
+
+  if (remainder === 0) return integerToWords(whole);
+
+  return `${integerToWords(whole)} و${properFractionToWords(remainder, denominator)}`;
+}
+
 function decimalToWords(intPart, fracPart) {
   const intWords = integerToWords(intPart || '0');
 
@@ -187,13 +248,16 @@ function decimalToWords(intPart, fracPart) {
 // Public entry point: find & replace every number-like token in a string
 // ---------------------------------------------------------------------
 function convertTextNumbers(text) {
-  // Order matters: time (H:MM) before decimals before plain integers,
-  // so a pattern like "9:30" is never partially re-matched as "9" + "30".
-  const combinedPattern = /(\b([01]?\d|2[0-3]):([0-5]\d)\b)|(\b\d+\.\d+\b)|(\b\d{1,3}(?:,\d{3})+\b)|(\b\d+\b)/g;
+  // Order matters: time (H:MM) and fractions (N/N) before decimals before
+  // plain integers, so nothing gets partially re-matched by a later pattern.
+  const combinedPattern = /(\b([01]?\d|2[0-3]):([0-5]\d)\b)|(\b(\d+)\/(\d+)\b)|(\b\d+\.\d+\b)|(\b\d{1,3}(?:,\d{3})+\b)|(\b\d+\b)/g;
 
-  return text.replace(combinedPattern, (match, timeFull, hh, mm, decimalMatch) => {
+  return text.replace(combinedPattern, (match, timeFull, hh, mm, fractionFull, numerator, denominator, decimalMatch) => {
     if (timeFull) {
       return timeToWords(hh, mm);
+    }
+    if (fractionFull) {
+      return fractionToWords(numerator, denominator);
     }
     if (decimalMatch) {
       const [intPart, fracPart] = decimalMatch.split('.');
